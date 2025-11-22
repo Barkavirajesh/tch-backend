@@ -1,0 +1,11 @@
+{
+  "dependencies": {
+    "consultation-page": "file:..",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0",
+    "expresses": "^1.1.2",
+    "nodemailer": "^7.0.10",
+    "uuid": "^13.0.0"
+  }
+}
