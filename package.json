@@ -1,11 +1,12 @@
 {
+  "type": "module",
   "dependencies": {
-    "consultation-page": "file:..",
+    "@supabase/supabase-js": "^2.84.0",
     "cors": "^2.8.5",
-    "dotenv": "^17.2.3",
+    "dotenv": "^16.3.1",
     "express": "^5.1.0",
-    "expresses": "^1.1.2",
-    "nodemailer": "^7.0.10",
+    "lowdb": "^6.0.1",
+    "nodemailer": "^6.9.11",
     "uuid": "^13.0.0"
   }
 }

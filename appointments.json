@@ -1,0 +1,37 @@
+{
+  "appointments": [
+    {
+      "id": "4979ae3c-fbf7-448f-b580-7bc547cef3c9",
+      "name": "barkavi",
+      "email": "barkavirajesh006@gmail.com",
+      "number": "7200300603",
+      "date": "2025-11-29",
+      "time": "Morning",
+      "consultType": "Online",
+      "confirmed": false,
+      "declined": false
+    },
+    {
+      "id": "63b7f7c3-5906-4f59-a2d9-ab4e84378f66",
+      "name": "barkavi",
+      "email": "barkavirajesh006@gmail.com",
+      "number": "7200300603",
+      "date": "2025-11-29",
+      "time": "Morning",
+      "consultType": "Online",
+      "confirmed": false,
+      "declined": false
+    },
+    {
+      "id": "56d77bbb-0971-4869-ba56-13b083e13ef1",
+      "name": "barkavi",
+      "email": "barkavirajesh006@gmail.com",
+      "number": "7200300603",
+      "date": "2025-11-29",
+      "time": "Morning",
+      "consultType": "Online",
+      "confirmed": false,
+      "declined": false
+    }
+  ]
+}
