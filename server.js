@@ -17,7 +17,8 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-const BASE_URL = process.env.BACKEND_URL || "https://traditional-care-hospital.onrender.com";
+// ---------------- BASE URL ----------------
+const BASE_URL = process.env.BASE_URL || "https://tch-backend-1.onrender.com";
 
 // ---------------- CORS ----------------
 app.use(cors({ origin: "*", methods: ["GET", "POST"] }));
@@ -27,26 +28,18 @@ const transporter = nodemailer.createTransport({
   service: "gmail",
   auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
 });
-const doctorEmail = "tch231017@gmail.com";
+const doctorEmail = process.env.EMAIL_USER; // same doctor mail
 const JITSI_PREFIX = "sidhahealth";
 
 // ---------------- SUPABASE ----------------
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-if (!SUPABASE_URL || !SUPABASE_KEY) {
-  console.error("❌ Missing Supabase variables");
-  process.exit(1);
-}
-
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
 
 // ---------------- HELPERS ----------------
 async function saveAppointment(obj) {
-  const { data, error } = await supabase
-    .from("appointments")
-    .insert([obj])
-    .select();
+  const { data, error } = await supabase.from("appointments").insert([obj]).select();
   if (error) throw error;
   return data[0];
 }
@@ -55,42 +48,23 @@ async function updateAppointment(id, updates) {
   const { data, error } = await supabase
     .from("appointments")
     .update(updates)
-    .eq("id", id) // exact UUID match
+    .eq("id", id)
     .select()
     .maybeSingle();
   if (error) throw error;
   return data;
 }
+
 async function getAppointment(id) {
-  try {
-    if (!id || typeof id !== "string") return null;
+  const { data, error } = await supabase
+    .from("appointments")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
 
-    console.log("Fetching appointment with ID:", id);
-
-    const { data, error } = await supabase
-      .from("appointments")
-      .select("*")
-      .eq("id", id) // DO NOT lowercase!
-      .maybeSingle();
-
-    if (error) {
-      console.error("Supabase select error:", error.message);
-      return null;
-    }
-
-    if (!data) {
-      console.log(`❌ Appointment with ID ${id} not found`);
-      return null;
-    }
-
-    console.log("Fetched appointment:", data);
-    return data;
-  } catch (err) {
-    console.error("Error in getAppointment:", err);
-    return null;
-  }
+  if (error || !data) return null;
+  return data;
 }
-
 
 // ---------------- ROUTES ----------------
 
@@ -98,8 +72,6 @@ async function getAppointment(id) {
 app.post("/book-appointment", async (req, res) => {
   try {
     const { name, email, number, date, time, consultType } = req.body;
-    if (!name || !email || !number)
-      return res.status(400).json({ error: "Missing required fields" });
 
     const id = uuidv4();
     const appointment = {
@@ -119,190 +91,157 @@ app.post("/book-appointment", async (req, res) => {
     const confirmLink = `${BASE_URL}/confirm-appointment/${id}`;
     const declineLink = `${BASE_URL}/decline-appointment/${id}`;
 
-    const doctorHtml = `
-      <h2>New Appointment</h2>
-      <p><strong>Name:</strong> ${name}</p>
-      <p><strong>Email:</strong> ${email}</p>
-      <p><strong>Date:</strong> ${date}</p>
-      <p><strong>Time:</strong> ${time}</p>
-      <p><strong>Type:</strong> ${consultType}</p>
-      <br>
-      <a href="${confirmLink}" style="color:green">Confirm</a> |
-      <a href="${declineLink}" style="color:red">Decline</a>
-    `;
-
+    // Email to doctor
     await transporter.sendMail({
       from: process.env.EMAIL_USER,
       to: doctorEmail,
       subject: "New Appointment Request",
-      html: doctorHtml,
+      html: `
+        <h2>New Appointment Request</h2>
+        <p><strong>Name:</strong> ${name}</p>
+        <p><strong>Email:</strong> ${email}</p>
+        <p><strong>Date:</strong> ${date}</p>
+        <p><strong>Time:</strong> ${time}</p>
+        <p><strong>Type:</strong> ${consultType}</p>
+
+        <br>
+        <a href="${confirmLink}" 
+           style="color:white;background:green;padding:10px;border-radius:5px;text-decoration:none">
+           Confirm
+        </a>
+
+        &nbsp;&nbsp;
+
+        <a href="${declineLink}" 
+           style="color:white;background:red;padding:10px;border-radius:5px;text-decoration:none">
+           Decline
+        </a>
+      `,
     });
 
     res.json({ message: "Request sent successfully", appointmentId: id });
   } catch (err) {
-    console.error("Error in /book-appointment:", err);
+    console.error(err);
     res.status(500).json({ error: "Internal server error" });
   }
 });
 
-// 2️⃣ Confirm Appointment Page
+// 2️⃣ Confirm Appointment - PAGE with Input
 app.get("/confirm-appointment/:id", async (req, res) => {
-  try {
-    const appointment = await getAppointment(req.params.id);
-    if (!appointment)
-      return res.status(404).send("<h1 style='color:red;'>❌ Appointment not found.</h1>");
+  const appointment = await getAppointment(req.params.id);
+  if (!appointment) return res.send("<h1>❌ Appointment not found.</h1>");
 
-    if (appointment.confirmed)
-      return res.send("<h2>✅ This appointment is already confirmed.</h2>");
-    if (appointment.declined)
-      return res.send("<h2>❌ This appointment was already declined.</h2>");
+  if (appointment.confirmed) return res.send("<h2>Appointment Already Confirmed</h2>");
+  if (appointment.declined) return res.send("<h2>Appointment Already Declined</h2>");
 
-    res.send(`
-      <h2>Confirm Appointment</h2>
-      <p><strong>Name:</strong> ${appointment.name}</p>
-      <p><strong>Email:</strong> ${appointment.email}</p>
-      <p><strong>Date:</strong> ${appointment.date}</p>
-      <p><strong>Time:</strong> ${appointment.time}</p>
-      <p><strong>Type:</strong> ${appointment.consult_type}</p>
+  res.send(`
+    <h2>Finalize Appointment Time</h2>
 
-      <form action="${BASE_URL}/confirm-appointment/${appointment.id}" method="POST">
-        <label>Final Time:</label>
-        <input name="finalTime" required />
-        <button type="submit">Confirm</button>
-      </form>
+    <form action="${BASE_URL}/confirm-appointment/${appointment.id}" method="POST">
+      <label><strong>Enter Final Time:</strong></label><br>
+      <input name="finalTime" required style="padding:8px;margin:10px"><br><br>
 
-      <form action="${BASE_URL}/decline-appointment/${appointment.id}" method="POST">
-        <label>Decline Reason:</label>
-        <input name="declineReason" />
-        <button type="submit">Decline</button>
-      </form>
-    `);
-  } catch (err) {
-    console.error("Error in GET /confirm-appointment/:id", err);
-    res.status(500).send("Internal server error");
-  }
+      <button type="submit" 
+        style="background:green;color:white;padding:10px 20px;border:none;border-radius:5px;">
+        Confirm Appointment
+      </button>
+    </form>
+
+    <br><br>
+
+    <form action="${BASE_URL}/decline-appointment/${appointment.id}" method="POST">
+      <label><strong>Decline Reason:</strong></label><br>
+      <input name="declineReason" style="padding:8px;margin:10px"><br><br>
+
+      <button type="submit" 
+        style="background:red;color:white;padding:10px 20px;border:none;border-radius:5px;">
+        Decline Appointment
+      </button>
+    </form>
+  `);
 });
 
-// 3️⃣ Confirm Appointment POST
+// 3️⃣ Confirm Appointment - SUBMIT
 app.post("/confirm-appointment/:id", async (req, res) => {
-  try {
-    const appointment = await getAppointment(req.params.id);
-    if (!appointment) return res.send("❌ Appointment not found");
+  const appointment = await getAppointment(req.params.id);
+  if (!appointment) return res.send("❌ Appointment not found");
 
-    const finalTime = req.body.finalTime;
-    const isOnline = appointment.consult_type?.toLowerCase() === "online";
-    const amount = 500;
+  const finalTime = req.body.finalTime;
+  const isOnline = appointment.consult_type?.toLowerCase() === "online";
+  const amount = 500;
 
-    const updates = {
-      confirmed: true,
-      final_time: finalTime,
-      amount,
-      payment_done: false,
-    };
+  const updates = {
+    confirmed: true,
+    final_time: finalTime,
+    amount,
+    payment_done: false,
+  };
 
-    if (isOnline) {
-      const room = `${JITSI_PREFIX}-${Math.random().toString(36).slice(2, 10)}`;
-      updates.jitsi_room = room;
-      updates.video_link = `https://meet.jit.si/${room}`;
-      updates.payment_link = `${BASE_URL}/payment/${appointment.id}`;
-    }
-
-    await updateAppointment(appointment.id, updates);
-
-    let html = `<h2>Appointment Confirmed</h2>
-      <p>Date: ${appointment.date}</p>
-      <p>Time: ${finalTime}</p>
-      <p>Fee: ₹${amount}</p>`;
-    if (isOnline) html += `<p><a href="${updates.payment_link}">Pay Now</a></p>`;
-
-    await transporter.sendMail({
-      from: process.env.EMAIL_USER,
-      to: appointment.email,
-      subject: "Appointment Confirmed",
-      html,
-    });
-
-    await transporter.sendMail({
-      from: process.env.EMAIL_USER,
-      to: doctorEmail,
-      subject: "Appointment Confirmed",
-      html: `<h3>Appointment with ${appointment.name} confirmed at ${finalTime}</h3>`,
-    });
-
-    res.send("✅ Confirmed successfully!");
-  } catch (err) {
-    console.error("Error in POST /confirm-appointment/:id", err);
-    res.status(500).send("Internal server error");
+  if (isOnline) {
+    const room = `${JITSI_PREFIX}-${Math.random().toString(36).slice(2, 10)}`;
+    updates.jitsi_room = room;
+    updates.video_link = `https://meet.jit.si/${room}`;
+    updates.payment_link = `${BASE_URL}/payment/${appointment.id}`;
   }
+
+  await updateAppointment(appointment.id, updates);
+
+  // Email to patient
+  await transporter.sendMail({
+    from: process.env.EMAIL_USER,
+    to: appointment.email,
+    subject: "Appointment Confirmed",
+    html: `
+      <h2>Your Appointment is Confirmed</h2>
+      <p><strong>Date:</strong> ${appointment.date}</p>
+      <p><strong>Time:</strong> ${finalTime}</p>
+      <p><strong>Fee:</strong> ₹${amount}</p>
+
+      ${isOnline ? `<a href="${updates.payment_link}">Pay Now</a>` : ""}
+    `,
+  });
+
+  res.send("<h2>✅ Appointment Confirmed Successfully!</h2>");
 });
 
 // 4️⃣ Decline Appointment
 app.post("/decline-appointment/:id", async (req, res) => {
-  try {
-    const appointment = await getAppointment(req.params.id);
-    if (!appointment) return res.send("❌ Appointment not found");
+  const appointment = await getAppointment(req.params.id);
+  if (!appointment) return res.send("❌ Appointment not found");
 
-    const reason = req.body.declineReason || "No reason given";
-    await updateAppointment(appointment.id, { declined: true, decline_reason: reason });
+  const reason = req.body.declineReason || "No reason provided";
 
-    await transporter.sendMail({
-      from: process.env.EMAIL_USER,
-      to: appointment.email,
-      subject: "Appointment Declined",
-      html: `<h3>Your appointment was declined</h3><p>${reason}</p>`,
-    });
+  await updateAppointment(appointment.id, { declined: true, decline_reason: reason });
 
-    res.send("❌ Appointment declined.");
-  } catch (err) {
-    console.error("Error in POST /decline-appointment/:id", err);
-    res.status(500).send("Internal server error");
-  }
+  await transporter.sendMail({
+    from: process.env.EMAIL_USER,
+    to: appointment.email,
+    subject: "Appointment Declined",
+    html: `<h3>Your appointment was declined</h3><p>${reason}</p>`,
+  });
+
+  res.send("<h2>❌ Appointment Declined</h2>");
 });
 
 // 5️⃣ Payment Page
 app.get("/payment/:id", async (req, res) => {
-  try {
-    const appointment = await getAppointment(req.params.id);
-    if (!appointment) return res.send("❌ Appointment not found");
+  const appointment = await getAppointment(req.params.id);
+  if (!appointment) return res.send("❌ Appointment not found");
 
-    const upi = process.env.UPI_ID;
-    const amount = appointment.amount;
-    const upiLink = `upi://pay?pa=${upi}&pn=SidhaHealth&am=${amount}&cu=INR`;
-    const qr = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(upiLink)}`;
+  const upi = process.env.UPI_ID;
+  const amount = appointment.amount;
 
-    res.send(`
-      <h2>Pay ₹${amount}</h2>
-      <img src="${qr}" />
-      <br><br>
-      <a href="${upiLink}">Pay Using UPI</a>
-    `);
-  } catch (err) {
-    console.error("Error in GET /payment/:id", err);
-    res.status(500).send("Internal server error");
-  }
-});
+  const upiLink = `upi://pay?pa=${upi}&pn=SidhaHealth&am=${amount}&cu=INR`;
+  const qr = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(upiLink)}`;
 
-// 6️⃣ Consultation Link
-app.get("/consultation/:id", async (req, res) => {
-  try {
-    const appointment = await getAppointment(req.params.id);
-    if (!appointment) return res.send("❌ Appointment not found");
-    if (!appointment.payment_done) return res.send("⚠ Payment Pending");
-
-    if (appointment.video_link)
-      return res.send(`<h2>Join Online Consultation</h2><a href="${appointment.video_link}">Join Now</a>`);
-
-    res.send(`<h2>Offline Consultation</h2>
-      <p>Date: ${appointment.date}</p>
-      <p>Time: ${appointment.final_time}</p>`);
-  } catch (err) {
-    console.error("Error in GET /consultation/:id", err);
-    res.status(500).send("Internal server error");
-  }
+  res.send(`
+    <h2>Pay ₹${amount}</h2>
+    <img src="${qr}" />
+    <br><br>
+    <a href="${upiLink}">Pay Using UPI</a>
+  `);
 });
 
 // ---------------- START SERVER ----------------
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () =>
-  console.log(`Server running on port ${PORT}, open: ${BASE_URL}`)
-);
+app.listen(PORT, () => console.log(`🔥 Backend running on ${BASE_URL}`));
