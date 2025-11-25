@@ -154,7 +154,7 @@ app.post("/book-appointment", async (req, res) => {
     const confirmLink = `${BASE_URL}/doctor-action/${id}/confirm`;
     const declineLink = `${BASE_URL}/doctor-action/${id}/decline`;
 
-    // Modern doctor notification HTML
+    // Doctor Notification HTML
     const doctorHtml = emailTemplate({
       title: "🩺 New Appointment Request",
       bodyHtml: `
@@ -189,8 +189,7 @@ app.post("/book-appointment", async (req, res) => {
   }
 });
 
-
-// 2️⃣ Manual Time Input (Doctor Confirm Page)
+// 2️⃣ Doctor Confirm Page
 app.get("/doctor-action/:id/confirm", async (req, res) => {
   const { id } = req.params;
   const appointment = await getAppointment(id);
@@ -198,7 +197,6 @@ app.get("/doctor-action/:id/confirm", async (req, res) => {
   if (appointment.confirmed) return res.send("✅ Appointment already confirmed.");
   if (appointment.declined) return res.send("❌ Appointment already declined.");
 
-  // Manual timing form (can also be improved as previously described)
   res.send(`
     <h2>Enter Final Appointment Time</h2>
     <form method="POST" action="/doctor-set-time/${id}">
@@ -210,8 +208,52 @@ app.get("/doctor-action/:id/confirm", async (req, res) => {
   `);
 });
 
+// 3️⃣ Doctor Decline Page → Ask for reason
+app.get("/doctor-action/:id/decline", async (req, res) => {
+  const { id } = req.params;
+  const appointment = await getAppointment(id);
+  if (!appointment) return res.status(404).send("❌ Appointment not found.");
+  if (appointment.confirmed) return res.send("✅ Appointment already confirmed.");
+  if (appointment.declined) return res.send("❌ Appointment already declined.");
 
-// 3️⃣ Submit Final Time + Send Emails
+  res.send(`
+    <h2>Decline Appointment</h2>
+    <form method="POST" action="/doctor-decline/${id}">
+      <label>Reason for Decline:</label><br>
+      <textarea name="reason" placeholder="Enter reason" required style="width:300px;height:100px;padding:8px;margin-top:8px;"></textarea>
+      <br><br>
+      <button type="submit" style="padding:10px 20px;background:red;color:white;border:none;border-radius:5px;">Decline Appointment</button>
+    </form>
+  `);
+});
+
+// 4️⃣ Submit Decline Reason
+app.post("/doctor-decline/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { reason } = req.body;
+
+    const appointment = await getAppointment(id);
+    if (!appointment) return res.status(404).send("❌ Appointment not found.");
+
+    await updateAppointment(id, { declined: true, decline_reason: reason });
+
+    // Notify patient
+    const patientHtml = emailTemplate({
+      title: "Appointment Declined",
+      bodyHtml: `<p>Your appointment on <strong>${appointment.date}</strong> has been declined by the doctor.</p>
+                 <p><strong>Reason:</strong> ${reason}</p>`
+    });
+    await sendEmail(appointment.email, "Appointment Declined", patientHtml);
+
+    res.send(`<h2>Appointment Declined ✅</h2><p>Reason submitted: ${reason}</p>`);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Server error.");
+  }
+});
+
+// 5️⃣ Submit Final Time + Send Emails
 app.post("/doctor-set-time/:id", async (req, res) => {
   try {
     const { id } = req.params;
@@ -242,7 +284,6 @@ app.post("/doctor-set-time/:id", async (req, res) => {
 
     await updateAppointment(id, updates);
 
-    // Patient Email (Pay Now if online)
     const patientHtml = emailTemplate({
       title: "Appointment Confirmed",
       bodyHtml: `
@@ -256,7 +297,6 @@ app.post("/doctor-set-time/:id", async (req, res) => {
     });
     await sendEmail(appointment.email, "Your Appointment is Confirmed", patientHtml);
 
-    // Doctor Email (with video link if online)
     const doctorHtml = emailTemplate({
       title: "Appointment Confirmed - Final Details",
       bodyHtml: `
@@ -279,8 +319,7 @@ app.post("/doctor-set-time/:id", async (req, res) => {
   }
 });
 
-
-// 4️⃣ Payment Page
+// 6️⃣ Payment Page
 app.get("/payment/:id", async (req, res) => {
   const appointment = await getAppointment(req.params.id);
   if (!appointment) return res.status(404).send("Appointment not found");
@@ -301,7 +340,6 @@ app.get("/payment/:id", async (req, res) => {
     </form>
 
     <script>
-      // Show the "I've Paid" button after 2 minutes (120000 ms)
       setTimeout(() => {
         document.getElementById('paidBtn').style.display = 'inline-block';
       }, 120000);
@@ -309,8 +347,7 @@ app.get("/payment/:id", async (req, res) => {
   `);
 });
 
-
-// 5️⃣ Payment Done → Show Video Link
+// 7️⃣ Payment Done → Show Video Link
 app.post("/payment-done/:id", async (req, res) => {
   const appointment = await getAppointment(req.params.id);
   if (!appointment) return res.status(404).send("Appointment not found");
@@ -327,7 +364,6 @@ app.post("/payment-done/:id", async (req, res) => {
     res.send("<h2>Payment Confirmed ✅</h2><p>Your appointment is confirmed.</p>");
   }
 });
-
 
 // ---------------- START SERVER ----------------
 const PORT = process.env.PORT || 5000;
