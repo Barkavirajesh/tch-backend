@@ -24,7 +24,7 @@ const BASE_URL = process.env.BASE_URL || `http://localhost:${process.env.PORT ||
 
 // ---------------- SENDGRID ----------------
 sgMail.setApiKey(process.env.SENDGRID_API_KEY);
-const senderEmail = process.env.EMAIL_USER;  // Verified sender
+const senderEmail = process.env.EMAIL_USER; // Verified sender
 const doctorEmail = "tch231017@gmail.com";
 
 // ---------------- SUPABASE ----------------
@@ -114,19 +114,10 @@ app.post("/book-appointment", async (req, res) => {
       <p><b>Date:</b> ${date}</p>
       <p><b>Requested Time:</b> ${time}</p>
       <p><b>Consult Type:</b> ${consultType}</p>
-
       <br>
-      <a href="${confirmLink}" 
-        style="background:green;color:white;padding:10px 15px;border-radius:5px;text-decoration:none;">
-        Confirm Appointment
-      </a>
-
+      <a href="${confirmLink}" style="background:green;color:white;padding:10px 15px;border-radius:5px;text-decoration:none;">Confirm Appointment</a>
       &nbsp;&nbsp;
-
-      <a href="${declineLink}" 
-        style="background:red;color:white;padding:10px 15px;border-radius:5px;text-decoration:none;">
-        Decline Appointment
-      </a>
+      <a href="${declineLink}" style="background:red;color:white;padding:10px 15px;border-radius:5px;text-decoration:none;">Decline Appointment</a>
     `;
 
     await sendEmail(doctorEmail, "New Appointment Request", doctorHtml);
@@ -142,10 +133,8 @@ app.post("/book-appointment", async (req, res) => {
 // 2️⃣ Manual Time Input (Doctor Confirm Page)
 app.get("/doctor-action/:id/confirm", async (req, res) => {
   const { id } = req.params;
-
   const appointment = await getAppointment(id);
   if (!appointment) return res.status(404).send("❌ Appointment not found.");
-
   if (appointment.confirmed) return res.send("✅ Appointment already confirmed.");
   if (appointment.declined) return res.send("❌ Appointment already declined.");
 
@@ -154,19 +143,9 @@ app.get("/doctor-action/:id/confirm", async (req, res) => {
     <h2>Enter Final Appointment Time</h2>
     <form method="POST" action="/doctor-set-time/${id}">
       <label>Final Time:</label><br>
-      <input 
-        type="text" 
-        name="final_time" 
-        placeholder="e.g. 7:30 PM" 
-        required
-        style="padding:10px;width:250px;font-size:16px;margin-top:10px;"
-      />
+      <input type="text" name="final_time" placeholder="e.g. 7:30 PM" required style="padding:10px;width:250px;font-size:16px;margin-top:10px;"/>
       <br><br>
-      <button 
-        type="submit" 
-        style="padding:10px 20px;font-size:16px;background:green;color:white;border:none;border-radius:5px;">
-        Confirm Appointment
-      </button>
+      <button type="submit" style="padding:10px 20px;font-size:16px;background:green;color:white;border:none;border-radius:5px;">Confirm Appointment</button>
     </form>
   `);
 });
@@ -195,7 +174,6 @@ app.post("/doctor-set-time/:id", async (req, res) => {
     if (isOnline) {
       const room = `${JITSI_PREFIX}-${Math.random().toString(36).slice(2, 10)}`;
       jitsiLink = `https://meet.jit.si/${room}`;
-
       updates.jitsi_room = room;
       updates.video_link = jitsiLink;
       updates.payment_link = `${BASE_URL}/payment/${id}`;
@@ -203,18 +181,17 @@ app.post("/doctor-set-time/:id", async (req, res) => {
 
     await updateAppointment(id, updates);
 
-    // Patient Email
+    // Patient Email (only Pay Now for online)
     const patientHtml = `
       <h2>Appointment Confirmed</h2>
       <p><b>Date:</b> ${appointment.date}</p>
       <p><b>Final Time:</b> ${final_time}</p>
-      ${isOnline ? `<p><b>Video Link:</b> <a href="${jitsiLink}">${jitsiLink}</a></p>` : ""}
       <p><b>Fee:</b> ₹${fee}</p>
-      ${isOnline ? `<a href="${updates.payment_link}">Pay Now</a>` : ""}
+      ${isOnline ? `<a href="${updates.payment_link}" style="padding:10px 20px;background:green;color:white;border-radius:5px;text-decoration:none;">Pay Now</a>` : ""}
     `;
     await sendEmail(appointment.email, "Your Appointment is Confirmed", patientHtml);
 
-    // Doctor Email
+    // Doctor Email (with video link)
     const doctorHtml = `
       <h2>Appointment Confirmed</h2>
       <p><b>Patient:</b> ${appointment.name}</p>
@@ -244,11 +221,33 @@ app.get("/payment/:id", async (req, res) => {
   const qr = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(upiLink)}`;
 
   res.send(`
-    <h2>Pay ₹${amount}</h2>
+    <h2>Pay ₹${amount} to confirm your appointment</h2>
     <img src="${qr}" />
     <br><br>
-    <a href="${upiLink}">Pay Using UPI</a>
+    <a href="${upiLink}" style="padding:10px 20px;background:green;color:white;border-radius:5px;text-decoration:none;">Pay Using UPI</a>
+    <br><br>
+    <form method="POST" action="/payment-done/${appointment.id}">
+      <button type="submit" style="padding:10px 20px;background:blue;color:white;border-radius:5px;">I've Paid</button>
+    </form>
   `);
+});
+
+// 5️⃣ Payment Done → Show Video Link
+app.post("/payment-done/:id", async (req, res) => {
+  const appointment = await getAppointment(req.params.id);
+  if (!appointment) return res.status(404).send("Appointment not found");
+
+  await updateAppointment(appointment.id, { payment_done: true });
+
+  if (appointment.consult_type.toLowerCase() === "online") {
+    res.send(`
+      <h2>Payment Confirmed ✅</h2>
+      <p>Your video consultation is ready.</p>
+      <a href="${appointment.video_link}" style="padding:10px 20px;background:green;color:white;border-radius:5px;text-decoration:none;">Join Now</a>
+    `);
+  } else {
+    res.send("<h2>Payment Confirmed ✅</h2><p>Your appointment is confirmed.</p>");
+  }
 });
 
 // ---------------- START SERVER ----------------
