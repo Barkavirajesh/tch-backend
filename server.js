@@ -27,19 +27,22 @@ app.use(cors({ origin: "*", methods: ["GET", "POST"] }));
 const transporter = nodemailer.createTransport({
   host: "smtp.sendgrid.net",
   port: 587,
-  secure: false, // TLS
+  secure: false,
   auth: {
-    user: "apikey", // fixed string for SendGrid SMTP
-    pass: process.env.SENDGRID_API_KEY, // your API key
+    user: "apikey",                  // literally "apikey"
+    pass: process.env.SENDGRID_API_KEY,
   },
 });
+
+const senderEmail = process.env.EMAIL_USER;  // verified SendGrid email
+const doctorEmail = "tch231017@gmail.com";  // doctor’s email (recipient)
 
 transporter.verify((err, success) => {
   if (err) console.error("❌ SendGrid transporter failed:", err);
   else console.log("✅ SendGrid transporter ready");
 });
 
-const doctorEmail = process.env.EMAIL_USER; // verified sender email
+
 const JITSI_PREFIX = "sidhahealth";
 
 // ---------------- SUPABASE ----------------
