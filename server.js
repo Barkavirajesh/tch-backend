@@ -211,6 +211,8 @@ app.post("/doctor-set-time/:id", async (req, res) => {
 });
 
 // 4️⃣ Payment Page
+
+// 4️⃣ Payment Page with 2-min delay for "I've Paid"
 app.get("/payment/:id", async (req, res) => {
   const appointment = await getAppointment(req.params.id);
   if (!appointment) return res.status(404).send("Appointment not found");
@@ -227,8 +229,15 @@ app.get("/payment/:id", async (req, res) => {
     <a href="${upiLink}" style="padding:10px 20px;background:green;color:white;border-radius:5px;text-decoration:none;">Pay Using UPI</a>
     <br><br>
     <form method="POST" action="/payment-done/${appointment.id}">
-      <button type="submit" style="padding:10px 20px;background:blue;color:white;border-radius:5px;">I've Paid</button>
+      <button id="paidBtn" type="submit" style="padding:10px 20px;background:blue;color:white;border-radius:5px; display:none;">I've Paid</button>
     </form>
+
+    <script>
+      // Show the "I've Paid" button after 2 minutes (120000 ms)
+      setTimeout(() => {
+        document.getElementById('paidBtn').style.display = 'inline-block';
+      }, 120000);
+    </script>
   `);
 });
 
