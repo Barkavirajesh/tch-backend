@@ -23,12 +23,23 @@ const BASE_URL = process.env.BASE_URL || "https://tch-backend-1.onrender.com";
 // ---------------- CORS ----------------
 app.use(cors({ origin: "*", methods: ["GET", "POST"] }));
 
-// ---------------- EMAIL ----------------
+// ---------------- EMAIL (SendGrid) ----------------
 const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
+  host: "smtp.sendgrid.net",
+  port: 587,
+  secure: false, // TLS
+  auth: {
+    user: "apikey", // fixed string for SendGrid SMTP
+    pass: process.env.SENDGRID_API_KEY, // your API key
+  },
 });
-const doctorEmail = process.env.EMAIL_USER; // same doctor mail
+
+transporter.verify((err, success) => {
+  if (err) console.error("❌ SendGrid transporter failed:", err);
+  else console.log("✅ SendGrid transporter ready");
+});
+
+const doctorEmail = process.env.EMAIL_USER; // verified sender email
 const JITSI_PREFIX = "sidhahealth";
 
 // ---------------- SUPABASE ----------------
@@ -61,7 +72,6 @@ async function getAppointment(id) {
     .select("*")
     .eq("id", id)
     .maybeSingle();
-
   if (error || !data) return null;
   return data;
 }
@@ -92,32 +102,36 @@ app.post("/book-appointment", async (req, res) => {
     const declineLink = `${BASE_URL}/decline-appointment/${id}`;
 
     // Email to doctor
-    await transporter.sendMail({
-      from: process.env.EMAIL_USER,
-      to: doctorEmail,
-      subject: "New Appointment Request",
-      html: `
-        <h2>New Appointment Request</h2>
-        <p><strong>Name:</strong> ${name}</p>
-        <p><strong>Email:</strong> ${email}</p>
-        <p><strong>Date:</strong> ${date}</p>
-        <p><strong>Time:</strong> ${time}</p>
-        <p><strong>Type:</strong> ${consultType}</p>
+    try {
+      await transporter.sendMail({
+        from: process.env.EMAIL_USER,
+        to: doctorEmail,
+        subject: "New Appointment Request",
+        html: `
+          <h2>New Appointment Request</h2>
+          <p><strong>Name:</strong> ${name}</p>
+          <p><strong>Email:</strong> ${email}</p>
+          <p><strong>Date:</strong> ${date}</p>
+          <p><strong>Time:</strong> ${time}</p>
+          <p><strong>Type:</strong> ${consultType}</p>
 
-        <br>
-        <a href="${confirmLink}" 
-           style="color:white;background:green;padding:10px;border-radius:5px;text-decoration:none">
-           Confirm
-        </a>
+          <br>
+          <a href="${confirmLink}" 
+             style="color:white;background:green;padding:10px;border-radius:5px;text-decoration:none">
+             Confirm
+          </a>
 
-        &nbsp;&nbsp;
+          &nbsp;&nbsp;
 
-        <a href="${declineLink}" 
-           style="color:white;background:red;padding:10px;border-radius:5px;text-decoration:none">
-           Decline
-        </a>
-      `,
-    });
+          <a href="${declineLink}" 
+             style="color:white;background:red;padding:10px;border-radius:5px;text-decoration:none">
+             Decline
+          </a>
+        `,
+      });
+    } catch (emailErr) {
+      console.error("❌ Failed to send doctor email:", emailErr);
+    }
 
     res.json({ message: "Request sent successfully", appointmentId: id });
   } catch (err) {
@@ -187,19 +201,23 @@ app.post("/confirm-appointment/:id", async (req, res) => {
   await updateAppointment(appointment.id, updates);
 
   // Email to patient
-  await transporter.sendMail({
-    from: process.env.EMAIL_USER,
-    to: appointment.email,
-    subject: "Appointment Confirmed",
-    html: `
-      <h2>Your Appointment is Confirmed</h2>
-      <p><strong>Date:</strong> ${appointment.date}</p>
-      <p><strong>Time:</strong> ${finalTime}</p>
-      <p><strong>Fee:</strong> ₹${amount}</p>
+  try {
+    await transporter.sendMail({
+      from: process.env.EMAIL_USER,
+      to: appointment.email,
+      subject: "Appointment Confirmed",
+      html: `
+        <h2>Your Appointment is Confirmed</h2>
+        <p><strong>Date:</strong> ${appointment.date}</p>
+        <p><strong>Time:</strong> ${finalTime}</p>
+        <p><strong>Fee:</strong> ₹${amount}</p>
 
-      ${isOnline ? `<a href="${updates.payment_link}">Pay Now</a>` : ""}
-    `,
-  });
+        ${isOnline ? `<a href="${updates.payment_link}">Pay Now</a>` : ""}
+      `,
+    });
+  } catch (emailErr) {
+    console.error("❌ Failed to send patient email:", emailErr);
+  }
 
   res.send("<h2>✅ Appointment Confirmed Successfully!</h2>");
 });
@@ -213,12 +231,16 @@ app.post("/decline-appointment/:id", async (req, res) => {
 
   await updateAppointment(appointment.id, { declined: true, decline_reason: reason });
 
-  await transporter.sendMail({
-    from: process.env.EMAIL_USER,
-    to: appointment.email,
-    subject: "Appointment Declined",
-    html: `<h3>Your appointment was declined</h3><p>${reason}</p>`,
-  });
+  try {
+    await transporter.sendMail({
+      from: process.env.EMAIL_USER,
+      to: appointment.email,
+      subject: "Appointment Declined",
+      html: `<h3>Your appointment was declined</h3><p>${reason}</p>`,
+    });
+  } catch (emailErr) {
+    console.error("❌ Failed to send decline email:", emailErr);
+  }
 
   res.send("<h2>❌ Appointment Declined</h2>");
 });
