@@ -15,37 +15,44 @@ dotenv.config({ path: path.resolve(__dirname, ".env") });
 
 // ---------------- EXPRESS SETUP ----------------
 const app = express();
+app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(cors({ origin: "*", methods: ["GET", "POST"] }));
 
 // ---------------- BASE URL ----------------
-const BASE_URL = process.env.BASE_URL || "https://tch-backend-1.onrender.com";
+const BASE_URL = process.env.BASE_URL || `http://localhost:${process.env.PORT || 5000}`;
 
-// ---------------- SENDGRID SETUP ----------------
+// ---------------- SENDGRID ----------------
 sgMail.setApiKey(process.env.SENDGRID_API_KEY);
-const senderEmail = process.env.EMAIL_USER;      // Verified SendGrid sender
-const doctorEmail = "tch231017@gmail.com";       // Doctor's email
+const senderEmail = process.env.EMAIL_USER; // Verified sender
+const doctorEmail = "tch231017@gmail.com";
 
-async function sendEmail(to, subject, html) {
-  try {
-    await sgMail.send({ to, from: senderEmail, subject, html });
-    console.log("✅ Email sent to", to);
-  } catch (err) {
-    console.error("❌ Failed to send email to", to, err);
-  }
-}
-
-// ---------------- JITSI PREFIX ----------------
-const JITSI_PREFIX = "sidhahealth";
-
-// ---------------- SUPABASE SETUP ----------------
+// ---------------- SUPABASE ----------------
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
+// ---------------- CONSTANTS ----------------
+const JITSI_PREFIX = "sidhahealth";
+
 // ---------------- HELPERS ----------------
+async function sendEmail(to, subject, html) {
+  try {
+    await sgMail.send({
+      to,
+      from: senderEmail,
+      subject,
+      html,
+      text: html.replace(/<[^>]+>/g, ""),
+    });
+    console.log(`✅ Email sent to ${to}`);
+  } catch (err) {
+    console.error(`❌ Failed to send email to ${to}`);
+    console.error(err.response?.body || err);
+  }
+}
+
 async function saveAppointment(obj) {
   const { data, error } = await supabase.from("appointments").insert([obj]).select();
   if (error) throw error;
@@ -79,6 +86,8 @@ async function getAppointment(id) {
 app.post("/book-appointment", async (req, res) => {
   try {
     const { name, email, number, date, time, consultType } = req.body;
+    if (!email || !consultType)
+      return res.status(400).json({ error: "Email and consult type required" });
 
     const id = uuidv4();
     const appointment = {
@@ -95,20 +104,21 @@ app.post("/book-appointment", async (req, res) => {
 
     await saveAppointment(appointment);
 
-    const confirmLink = `${BASE_URL}/confirm-appointment/${id}`;
-    const declineLink = `${BASE_URL}/decline-appointment/${id}`;
+    // ✅ Links for doctor to confirm or decline
+    const confirmLink = `${BASE_URL}/doctor-action/${id}/confirm`;
+    const declineLink = `${BASE_URL}/doctor-action/${id}/decline`;
 
     const doctorHtml = `
-      <h2>New Appointment Request</h2>
-      <p><strong>Name:</strong> ${name}</p>
-      <p><strong>Email:</strong> ${email}</p>
-      <p><strong>Date:</strong> ${date}</p>
-      <p><strong>Time:</strong> ${time}</p>
-      <p><strong>Type:</strong> ${consultType}</p>
+      <h2>🩺 New Appointment Request</h2>
+      <p><b>Patient:</b> ${name}</p>
+      <p><b>Email:</b> ${email}</p>
+      <p><b>Date:</b> ${date}</p>
+      <p><b>Time:</b> ${time}</p>
+      <p><b>Type:</b> ${consultType}</p>
       <br>
-      <a href="${confirmLink}" style="color:white;background:green;padding:10px;border-radius:5px;text-decoration:none">Confirm</a>
+      <a href="${confirmLink}" style="background:green;color:white;padding:10px;border-radius:5px;text-decoration:none;">Confirm Appointment</a>
       &nbsp;&nbsp;
-      <a href="${declineLink}" style="color:white;background:red;padding:10px;border-radius:5px;text-decoration:none">Decline</a>
+      <a href="${declineLink}" style="background:red;color:white;padding:10px;border-radius:5px;text-decoration:none;">Decline Appointment</a>
     `;
 
     await sendEmail(doctorEmail, "New Appointment Request", doctorHtml);
@@ -120,84 +130,78 @@ app.post("/book-appointment", async (req, res) => {
   }
 });
 
-// 2️⃣ Confirm Appointment - PAGE
-app.get("/confirm-appointment/:id", async (req, res) => {
-  const appointment = await getAppointment(req.params.id);
-  if (!appointment) return res.send("<h1>❌ Appointment not found.</h1>");
-  if (appointment.confirmed) return res.send("<h2>Appointment Already Confirmed</h2>");
-  if (appointment.declined) return res.send("<h2>Appointment Already Declined</h2>");
+// 2️⃣ Doctor Confirm / Decline Link
+app.get("/doctor-action/:id/:action", async (req, res) => {
+  try {
+    const { id, action } = req.params;
+    const appointment = await getAppointment(id);
+    if (!appointment) return res.status(404).send("❌ Appointment not found.");
 
-  res.send(`
-    <h2>Finalize Appointment Time</h2>
-    <form action="${BASE_URL}/confirm-appointment/${appointment.id}" method="POST">
-      <label><strong>Enter Final Time:</strong></label><br>
-      <input name="finalTime" required style="padding:8px;margin:10px"><br><br>
-      <button type="submit" style="background:green;color:white;padding:10px 20px;border:none;border-radius:5px;">Confirm Appointment</button>
-    </form>
-    <br><br>
-    <form action="${BASE_URL}/decline-appointment/${appointment.id}" method="POST">
-      <label><strong>Decline Reason:</strong></label><br>
-      <input name="declineReason" style="padding:8px;margin:10px"><br><br>
-      <button type="submit" style="background:red;color:white;padding:10px 20px;border:none;border-radius:5px;">Decline Appointment</button>
-    </form>
-  `);
-});
+    if (appointment.confirmed) return res.send("✅ Appointment already confirmed.");
+    if (appointment.declined) return res.send("❌ Appointment already declined.");
 
-// 3️⃣ Confirm Appointment - SUBMIT
-app.post("/confirm-appointment/:id", async (req, res) => {
-  const appointment = await getAppointment(req.params.id);
-  if (!appointment) return res.send("❌ Appointment not found");
+    if (action === "confirm") {
+      const isOnline = appointment.consult_type.toLowerCase() === "online";
+      const fee = 500;
+      const updates = {
+        confirmed: true,
+        final_time: appointment.time,
+        amount: fee,
+        payment_done: !isOnline,
+      };
 
-  const finalTime = req.body.finalTime;
-  const isOnline = appointment.consult_type?.toLowerCase() === "online";
-  const amount = 500;
+      let jitsiLink = null;
+      if (isOnline) {
+        const room = `${JITSI_PREFIX}-${Math.random().toString(36).slice(2, 10)}`;
+        jitsiLink = `https://meet.jit.si/${room}`;
+        updates.jitsi_room = room;
+        updates.video_link = jitsiLink;
+        updates.payment_link = `${BASE_URL}/payment/${appointment.id}`;
+      }
 
-  const updates = {
-    confirmed: true,
-    final_time: finalTime,
-    amount,
-    payment_done: false,
-  };
+      await updateAppointment(appointment.id, updates);
 
-  if (isOnline) {
-    const room = `${JITSI_PREFIX}-${Math.random().toString(36).slice(2, 10)}`;
-    updates.jitsi_room = room;
-    updates.video_link = `https://meet.jit.si/${room}`;
-    updates.payment_link = `${BASE_URL}/payment/${appointment.id}`;
+      // Patient Email
+      const patientHtml = `
+        <h2>Your Appointment is Confirmed</h2>
+        <p><b>Date:</b> ${appointment.date}</p>
+        <p><b>Time:</b> ${appointment.time}</p>
+        ${isOnline ? `<p><b>Video Link:</b> <a href="${jitsiLink}">${jitsiLink}</a></p>` : ""}
+        <p><b>Fee:</b> ₹${fee}</p>
+        ${isOnline ? `<a href="${updates.payment_link}">Pay Now</a>` : ""}
+      `;
+      await sendEmail(appointment.email, "Appointment Confirmed", patientHtml);
+
+      // Doctor Email (with video link if online)
+      const doctorHtml = `
+        <h2>Appointment Confirmed</h2>
+        <p><b>Patient:</b> ${appointment.name}</p>
+        <p><b>Date:</b> ${appointment.date}</p>
+        <p><b>Time:</b> ${appointment.time}</p>
+        <p><b>Type:</b> ${appointment.consult_type}</p>
+        ${isOnline ? `<p><b>Video Link:</b> <a href="${jitsiLink}">${jitsiLink}</a></p>` : ""}
+      `;
+      await sendEmail(doctorEmail, "Appointment Confirmed - Consultation Link", doctorHtml);
+
+      res.send("✅ Appointment confirmed and emails sent.");
+    } else if (action === "decline") {
+      await updateAppointment(appointment.id, { declined: true, decline_reason: "Declined by doctor" });
+      const declineHtml = `<h3>Your appointment was declined</h3><p>Reason: Declined by doctor</p>`;
+      await sendEmail(appointment.email, "Appointment Declined", declineHtml);
+      res.send("❌ Appointment declined and patient notified.");
+    } else {
+      res.status(400).send("❌ Invalid action.");
+    }
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Internal server error");
   }
-
-  await updateAppointment(appointment.id, updates);
-
-  const patientHtml = `
-    <h2>Your Appointment is Confirmed</h2>
-    <p><strong>Date:</strong> ${appointment.date}</p>
-    <p><strong>Time:</strong> ${finalTime}</p>
-    <p><strong>Fee:</strong> ₹${amount}</p>
-    ${isOnline ? `<a href="${updates.payment_link}">Pay Now</a>` : ""}
-  `;
-  await sendEmail(appointment.email, "Appointment Confirmed", patientHtml);
-
-  res.send("<h2>✅ Appointment Confirmed Successfully!</h2>");
 });
 
-// 4️⃣ Decline Appointment
-app.post("/decline-appointment/:id", async (req, res) => {
-  const appointment = await getAppointment(req.params.id);
-  if (!appointment) return res.send("❌ Appointment not found");
-
-  const reason = req.body.declineReason || "No reason provided";
-  await updateAppointment(appointment.id, { declined: true, decline_reason: reason });
-
-  const declineHtml = `<h3>Your appointment was declined</h3><p>${reason}</p>`;
-  await sendEmail(appointment.email, "Appointment Declined", declineHtml);
-
-  res.send("<h2>❌ Appointment Declined</h2>");
-});
-
-// 5️⃣ Payment Page
+// 3️⃣ Payment Page
 app.get("/payment/:id", async (req, res) => {
   const appointment = await getAppointment(req.params.id);
-  if (!appointment) return res.send("❌ Appointment not found");
+  if (!appointment) return res.status(404).send("Appointment not found");
 
   const upi = process.env.UPI_ID;
   const amount = appointment.amount;
@@ -207,11 +211,11 @@ app.get("/payment/:id", async (req, res) => {
   res.send(`
     <h2>Pay ₹${amount}</h2>
     <img src="${qr}" />
-    <br><br>
+    <br>
     <a href="${upiLink}">Pay Using UPI</a>
   `);
 });
 
 // ---------------- START SERVER ----------------
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`🔥 Backend running on ${BASE_URL}`));
+app.listen(PORT, () => console.log(`🚀 Server running on ${BASE_URL}`));
