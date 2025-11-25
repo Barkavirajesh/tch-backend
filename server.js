@@ -37,6 +37,53 @@ const supabase = createClient(
 const JITSI_PREFIX = "sidhahealth";
 
 // ---------------- HELPERS ----------------
+
+// Responsive email HTML template wrapper
+function emailTemplate({ title, bodyHtml, actionLink, actionText }) {
+  return `
+<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${title}</title>
+    <style>
+      body, table, td, a { -webkit-text-size-adjust:100%; -ms-text-size-adjust:100%; }
+      body { margin:0; padding:0; width:100% !important; background:#f5f5f7; font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; color:#111; }
+      table { border-collapse:collapse !important; }
+      a { color:#2563eb; text-decoration:underline; }
+      .card { max-width:480px; margin:20px auto; }
+      @media screen and (max-width:600px){
+        .card { padding:12px !important; }
+        .content { padding:16px !important; }
+        h1 { font-size:22px !important; }
+      }
+    </style>
+  </head>
+  <body style="margin:0;padding:0;background:#f5f5f7;">
+    <div class="card" style="background:#fff; border-radius:12px; box-shadow:0 5px 20px rgba(0,0,0,0.07); margin:30px auto; max-width:480px; padding:24px;">
+      <div style="text-align:center;margin-bottom:20px;">
+        <img src="https://sidhahealth.com/logo.png" alt="SidhaHealth Logo" style="height:44px; width:auto; border:none; background:transparent; display:inline-block;" />
+      </div>
+      <div class="content" style="padding:16px 10px;">
+        <h1 style="font-size:24px;font-weight:700;color:#111;margin:0 0 12px;">${title}</h1>
+        <div style="color:#363636;font-size:15px;line-height:1.6;">
+          ${bodyHtml}
+        </div>
+        ${actionLink ? `
+        <div style="text-align:center;margin:28px 0 0 0;">
+          <a href="${actionLink}" style="display:inline-block; padding:12px 32px; border-radius:34px; background:#16a34a; color:#fff; font-weight:600; font-size:16px; text-decoration:none; margin:2px 7px;">${actionText}</a>
+        </div>` : ""}
+      </div>
+      <div style="border-top:1px solid #ececec;margin:20px 0 0 0;padding-top:12px;font-size:13px;color:#8f8f8f;text-align:center;">
+        SidhaHealth &middot; For help, contact <a href="mailto:support@sidhahealth.com" style="color:#2563eb;text-decoration:underline;">support@sidhahealth.com</a>
+      </div>
+    </div>
+  </body>
+</html>
+  `;
+}
+
 async function sendEmail(to, subject, html) {
   try {
     await sgMail.send({
@@ -107,18 +154,30 @@ app.post("/book-appointment", async (req, res) => {
     const confirmLink = `${BASE_URL}/doctor-action/${id}/confirm`;
     const declineLink = `${BASE_URL}/doctor-action/${id}/decline`;
 
-    const doctorHtml = `
-      <h2>🩺 New Appointment Request</h2>
-      <p><b>Name:</b> ${name}</p>
-      <p><b>Email:</b> ${email}</p>
-      <p><b>Date:</b> ${date}</p>
-      <p><b>Requested Time:</b> ${time}</p>
-      <p><b>Consult Type:</b> ${consultType}</p>
-      <br>
-      <a href="${confirmLink}" style="background:green;color:white;padding:10px 15px;border-radius:5px;text-decoration:none;">Confirm Appointment</a>
-      &nbsp;&nbsp;
-      <a href="${declineLink}" style="background:red;color:white;padding:10px 15px;border-radius:5px;text-decoration:none;">Decline Appointment</a>
-    `;
+    // Modern doctor notification HTML
+    const doctorHtml = emailTemplate({
+      title: "🩺 New Appointment Request",
+      bodyHtml: `
+        <p><strong>Name:</strong> ${name}</p>
+        <p><strong>Email:</strong> ${email}</p>
+        <p><strong>Date:</strong> ${date}</p>
+        <p><strong>Requested Time:</strong> ${time}</p>
+        <p><strong>Consult Type:</strong> ${consultType}</p>
+      `,
+      actionLink: confirmLink,
+      actionText: "Confirm Appointment"
+    }) +
+    emailTemplate({
+      title: "Decline Appointment",
+      bodyHtml: `
+        <p><strong>Name:</strong> ${name}</p>
+        <p><strong>Email:</strong> ${email}</p>
+        <p><strong>Date:</strong> ${date}</p>
+        <p><strong>Consult Type:</strong> ${consultType}</p>
+      `,
+      actionLink: declineLink,
+      actionText: "Decline Appointment"
+    });
 
     await sendEmail(doctorEmail, "New Appointment Request", doctorHtml);
 
@@ -130,6 +189,7 @@ app.post("/book-appointment", async (req, res) => {
   }
 });
 
+
 // 2️⃣ Manual Time Input (Doctor Confirm Page)
 app.get("/doctor-action/:id/confirm", async (req, res) => {
   const { id } = req.params;
@@ -138,7 +198,7 @@ app.get("/doctor-action/:id/confirm", async (req, res) => {
   if (appointment.confirmed) return res.send("✅ Appointment already confirmed.");
   if (appointment.declined) return res.send("❌ Appointment already declined.");
 
-  // Manual timing form
+  // Manual timing form (can also be improved as previously described)
   res.send(`
     <h2>Enter Final Appointment Time</h2>
     <form method="POST" action="/doctor-set-time/${id}">
@@ -149,6 +209,7 @@ app.get("/doctor-action/:id/confirm", async (req, res) => {
     </form>
   `);
 });
+
 
 // 3️⃣ Submit Final Time + Send Emails
 app.post("/doctor-set-time/:id", async (req, res) => {
@@ -181,25 +242,33 @@ app.post("/doctor-set-time/:id", async (req, res) => {
 
     await updateAppointment(id, updates);
 
-    // Patient Email (only Pay Now for online)
-    const patientHtml = `
-      <h2>Appointment Confirmed</h2>
-      <p><b>Date:</b> ${appointment.date}</p>
-      <p><b>Final Time:</b> ${final_time}</p>
-      <p><b>Fee:</b> ₹${fee}</p>
-      ${isOnline ? `<a href="${updates.payment_link}" style="padding:10px 20px;background:green;color:white;border-radius:5px;text-decoration:none;">Pay Now</a>` : ""}
-    `;
+    // Patient Email (Pay Now if online)
+    const patientHtml = emailTemplate({
+      title: "Appointment Confirmed",
+      bodyHtml: `
+        <p><strong>Date:</strong> ${appointment.date}</p>
+        <p><strong>Final Time:</strong> ${final_time}</p>
+        <p><strong>Fee:</strong> ₹${fee}</p>
+        ${isOnline ? "<p style='margin-top:18px;'><strong>Online video consultation—please pay by clicking the button below.</strong></p>" : "<p style='margin-top:18px;'>Please pay at the clinic.</p>"}
+      `,
+      actionLink: isOnline ? updates.payment_link : null,
+      actionText: isOnline ? "Pay Now" : null
+    });
     await sendEmail(appointment.email, "Your Appointment is Confirmed", patientHtml);
 
-    // Doctor Email (with video link)
-    const doctorHtml = `
-      <h2>Appointment Confirmed</h2>
-      <p><b>Patient:</b> ${appointment.name}</p>
-      <p><b>Date:</b> ${appointment.date}</p>
-      <p><b>Final Time:</b> ${final_time}</p>
-      <p><b>Type:</b> ${appointment.consult_type}</p>
-      ${isOnline ? `<p><b>Video Link:</b> <a href="${jitsiLink}">${jitsiLink}</a></p>` : ""}
-    `;
+    // Doctor Email (with video link if online)
+    const doctorHtml = emailTemplate({
+      title: "Appointment Confirmed - Final Details",
+      bodyHtml: `
+        <p><strong>Patient:</strong> ${appointment.name}</p>
+        <p><strong>Date:</strong> ${appointment.date}</p>
+        <p><strong>Final Time:</strong> ${final_time}</p>
+        <p><strong>Type:</strong> ${appointment.consult_type}</p>
+        ${isOnline ? `<p><strong>Video Link:</strong> <a href="${jitsiLink}">${jitsiLink}</a></p>` : ""}
+      `,
+      actionLink: isOnline ? jitsiLink : null,
+      actionText: isOnline ? "Join Video" : null
+    });
     await sendEmail(doctorEmail, "Appointment Confirmed - Final Details", doctorHtml);
 
     res.send("✅ Appointment confirmed successfully. Emails sent.");
@@ -210,9 +279,8 @@ app.post("/doctor-set-time/:id", async (req, res) => {
   }
 });
 
-// 4️⃣ Payment Page
 
-// 4️⃣ Payment Page with 2-min delay for "I've Paid"
+// 4️⃣ Payment Page
 app.get("/payment/:id", async (req, res) => {
   const appointment = await getAppointment(req.params.id);
   if (!appointment) return res.status(404).send("Appointment not found");
@@ -241,6 +309,7 @@ app.get("/payment/:id", async (req, res) => {
   `);
 });
 
+
 // 5️⃣ Payment Done → Show Video Link
 app.post("/payment-done/:id", async (req, res) => {
   const appointment = await getAppointment(req.params.id);
@@ -258,6 +327,7 @@ app.post("/payment-done/:id", async (req, res) => {
     res.send("<h2>Payment Confirmed ✅</h2><p>Your appointment is confirmed.</p>");
   }
 });
+
 
 // ---------------- START SERVER ----------------
 const PORT = process.env.PORT || 5000;
