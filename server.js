@@ -38,52 +38,6 @@ const JITSI_PREFIX = "sidhahealth";
 
 // ---------------- HELPERS ----------------
 
-// Responsive email HTML template wrapper
-function emailTemplate({ title, bodyHtml, actionLink, actionText }) {
-  return `
-<!DOCTYPE html>
-<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
-  <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>${title}</title>
-    <style>
-      body, table, td, a { -webkit-text-size-adjust:100%; -ms-text-size-adjust:100%; }
-      body { margin:0; padding:0; width:100% !important; background:#f5f5f7; font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; color:#111; }
-      table { border-collapse:collapse !important; }
-      a { color:#2563eb; text-decoration:underline; }
-      .card { max-width:480px; margin:20px auto; }
-      @media screen and (max-width:600px){
-        .card { padding:12px !important; }
-        .content { padding:16px !important; }
-        h1 { font-size:22px !important; }
-      }
-    </style>
-  </head>
-  <body style="margin:0;padding:0;background:#f5f5f7;">
-    <div class="card" style="background:#fff; border-radius:12px; box-shadow:0 5px 20px rgba(0,0,0,0.07); margin:30px auto; max-width:480px; padding:24px;">
-      <div style="text-align:center;margin-bottom:20px;">
-        <img src="https://sidhahealth.com/logo.png" alt="SidhaHealth Logo" style="height:44px; width:auto; border:none; background:transparent; display:inline-block;" />
-      </div>
-      <div class="content" style="padding:16px 10px;">
-        <h1 style="font-size:24px;font-weight:700;color:#111;margin:0 0 12px;">${title}</h1>
-        <div style="color:#363636;font-size:15px;line-height:1.6;">
-          ${bodyHtml}
-        </div>
-        ${actionLink ? `
-        <div style="text-align:center;margin:28px 0 0 0;">
-          <a href="${actionLink}" style="display:inline-block; padding:12px 32px; border-radius:34px; background:#16a34a; color:#fff; font-weight:600; font-size:16px; text-decoration:none; margin:2px 7px;">${actionText}</a>
-        </div>` : ""}
-      </div>
-      <div style="border-top:1px solid #ececec;margin:20px 0 0 0;padding-top:12px;font-size:13px;color:#8f8f8f;text-align:center;">
-        SidhaHealth &middot; For help, contact <a href="mailto:support@sidhahealth.com" style="color:#2563eb;text-decoration:underline;">support@sidhahealth.com</a>
-      </div>
-    </div>
-  </body>
-</html>
-  `;
-}
-
 async function sendEmail(to, subject, html) {
   try {
     await sgMail.send({
@@ -154,35 +108,48 @@ app.post("/book-appointment", async (req, res) => {
     const confirmLink = `${BASE_URL}/doctor-action/${id}/confirm`;
     const declineLink = `${BASE_URL}/doctor-action/${id}/decline`;
 
-    // Doctor Notification HTML
-    const doctorHtml = emailTemplate({
-      title: "🩺 New Appointment Request",
-      bodyHtml: `
-        <p><strong>Name:</strong> ${name}</p>
-        <p><strong>Email:</strong> ${email}</p>
-        <p><strong>Date:</strong> ${date}</p>
-        <p><strong>Requested Time:</strong> ${time}</p>
-        <p><strong>Consult Type:</strong> ${consultType}</p>
-      `,
-      actionLink: confirmLink,
-      actionText: "Confirm Appointment"
-    }) +
-    emailTemplate({
-      title: "Decline Appointment",
-      bodyHtml: `
-        <p><strong>Name:</strong> ${name}</p>
-        <p><strong>Email:</strong> ${email}</p>
-        <p><strong>Date:</strong> ${date}</p>
-        <p><strong>Consult Type:</strong> ${consultType}</p>
-      `,
-      actionLink: declineLink,
-      actionText: "Decline Appointment"
-    });
+    // Doctor Notification HTML, matching your image upload
+    const doctorHtml = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>New Appointment Request</title>
+</head>
+<body style="margin:0;padding:0;background:#f7fcfd;font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+  <div style="max-width:620px;margin:32px auto;background:#fff;border-radius:16px;box-shadow:0 2px 12px rgba(0,0,0,0.07);border:1px solid #eff3f4;padding:32px 24px;">
+    <div style="text-align:center;margin-bottom:26px;">
+      <span style="font-size:28px;vertical-align:middle;">🩺</span>
+      <span style="font-size:25px;font-weight:700;color:#22a86a;margin-left:9px;vertical-align:middle;">
+        New Appointment Request
+      </span>
+    </div>
+    <div style="background:#e8f8ee;border-radius:8px;padding:18px 15px;margin-bottom:30px;">
+      <div style="font-size:17px;line-height:1.55;color:#133c27;">
+        <span style="font-weight:bold;">Patient:</span> ${name}<br>
+        <span style="font-weight:bold;">Email:</span> <a href="mailto:${email}" style="color:#2176b8;text-decoration:underline;">${email}</a><br>
+        <span style="font-weight:bold;">Date:</span> ${date}<br>
+        <span style="font-weight:bold;">Slot:</span> ${time}<br>
+        <span style="font-weight:bold;">Type:</span> ${consultType}
+      </div>
+    </div>
+    <div style="text-align:center;">
+      <a href="${confirmLink}" style="display:inline-block;min-width:148px;padding:14px 0;border-radius:8px;background:#22a86a;color:#fff;font-size:20px;font-weight:600;text-decoration:none;margin:0 16px 4px 0;border:none;box-shadow:0 2px 8px rgba(34,168,106,0.13);">
+        Confirm
+      </a>
+      <a href="${declineLink}" style="display:inline-block;min-width:148px;padding:14px 0;border-radius:8px;background:#d7111c;color:#fff;font-size:20px;font-weight:600;text-decoration:none;margin:0 0 4px 0;border:none;box-shadow:0 2px 8px rgba(215,17,28,0.11);">
+        Decline
+      </a>
+    </div>
+  </div>
+</body>
+</html>
+    `;
 
     await sendEmail(doctorEmail, "New Appointment Request", doctorHtml);
 
     res.json({ message: "Appointment request sent successfully", appointmentId: id });
-
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Server error" });
@@ -239,11 +206,11 @@ app.post("/doctor-decline/:id", async (req, res) => {
     await updateAppointment(id, { declined: true, decline_reason: reason });
 
     // Notify patient
-    const patientHtml = emailTemplate({
-      title: "Appointment Declined",
-      bodyHtml: `<p>Your appointment on <strong>${appointment.date}</strong> has been declined by the doctor.</p>
-                 <p><strong>Reason:</strong> ${reason}</p>`
-    });
+    const patientHtml = `
+      <h2>Appointment Declined</h2>
+      <p>Your appointment on <strong>${appointment.date}</strong> has been declined by the doctor.</p>
+      <p><strong>Reason:</strong> ${reason}</p>
+    `;
     await sendEmail(appointment.email, "Appointment Declined", patientHtml);
 
     res.send(`<h2>Appointment Declined ✅</h2><p>Reason submitted: ${reason}</p>`);
@@ -284,35 +251,27 @@ app.post("/doctor-set-time/:id", async (req, res) => {
 
     await updateAppointment(id, updates);
 
-    const patientHtml = emailTemplate({
-      title: "Appointment Confirmed",
-      bodyHtml: `
-        <p><strong>Date:</strong> ${appointment.date}</p>
-        <p><strong>Final Time:</strong> ${final_time}</p>
-        <p><strong>Fee:</strong> ₹${fee}</p>
-        ${isOnline ? "<p style='margin-top:18px;'><strong>Online video consultation—please pay by clicking the button below.</strong></p>" : "<p style='margin-top:18px;'>Please pay at the clinic.</p>"}
-      `,
-      actionLink: isOnline ? updates.payment_link : null,
-      actionText: isOnline ? "Pay Now" : null
-    });
+    const patientHtml = `
+      <h2>Appointment Confirmed</h2>
+      <p><strong>Date:</strong> ${appointment.date}</p>
+      <p><strong>Final Time:</strong> ${final_time}</p>
+      <p><strong>Fee:</strong> ₹${fee}</p>
+      ${isOnline ? "<p style='margin-top:18px;'><strong>Online video consultation—please pay by clicking the button below.</strong></p>" : "<p style='margin-top:18px;'>Please pay at the clinic.</p>"}
+      ${isOnline ? `<a href="${updates.payment_link}" style="display:inline-block;margin-top:8px;padding:10px 24px;border-radius:7px;background:green;color:#fff;font-size:17px;text-decoration:none;font-weight:600;">Pay Now</a>` : ""}
+    `;
     await sendEmail(appointment.email, "Your Appointment is Confirmed", patientHtml);
 
-    const doctorHtml = emailTemplate({
-      title: "Appointment Confirmed - Final Details",
-      bodyHtml: `
-        <p><strong>Patient:</strong> ${appointment.name}</p>
-        <p><strong>Date:</strong> ${appointment.date}</p>
-        <p><strong>Final Time:</strong> ${final_time}</p>
-        <p><strong>Type:</strong> ${appointment.consult_type}</p>
-        ${isOnline ? `<p><strong>Video Link:</strong> <a href="${jitsiLink}">${jitsiLink}</a></p>` : ""}
-      `,
-      actionLink: isOnline ? jitsiLink : null,
-      actionText: isOnline ? "Join Video" : null
-    });
+    const doctorHtml = `
+      <h2>Appointment Confirmed</h2>
+      <p><strong>Patient:</strong> ${appointment.name}</p>
+      <p><strong>Date:</strong> ${appointment.date}</p>
+      <p><strong>Final Time:</strong> ${final_time}</p>
+      <p><strong>Type:</strong> ${appointment.consult_type}</p>
+      ${isOnline ? `<p><strong>Video Link:</strong> <a href="${jitsiLink}">${jitsiLink}</a></p>` : ""}
+    `;
     await sendEmail(doctorEmail, "Appointment Confirmed - Final Details", doctorHtml);
 
     res.send("✅ Appointment confirmed successfully. Emails sent.");
-
   } catch (err) {
     console.error(err);
     res.status(500).send("Server error.");
@@ -338,7 +297,6 @@ app.get("/payment/:id", async (req, res) => {
     <form method="POST" action="/payment-done/${appointment.id}">
       <button id="paidBtn" type="submit" style="padding:10px 20px;background:blue;color:white;border-radius:5px; display:none;">I've Paid</button>
     </form>
-
     <script>
       setTimeout(() => {
         document.getElementById('paidBtn').style.display = 'inline-block';
