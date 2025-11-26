@@ -319,7 +319,7 @@ app.post("/doctor-set-time/:id", async (req, res) => {
   }
 });
 
-// 6️⃣ Payment Page
+// 6️⃣ Payment Page (ENHANCED/CENTERED)
 app.get("/payment/:id", async (req, res) => {
   const appointment = await getAppointment(req.params.id);
   if (!appointment) return res.status(404).send("Appointment not found");
@@ -330,20 +330,94 @@ app.get("/payment/:id", async (req, res) => {
   const qr = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(upiLink)}`;
 
   res.send(`
-    <h2>Pay ₹${amount} to confirm your appointment</h2>
-    <img src="${qr}" />
-    <br><br>
-    <a href="${upiLink}" style="padding:10px 20px;background:green;color:white;border-radius:5px;text-decoration:none;">Pay Using UPI</a>
-    <br><br>
-    <form method="POST" action="/payment-done/${appointment.id}">
-      <button id="paidBtn" type="submit" style="padding:10px 20px;background:blue;color:white;border-radius:5px; display:none;">I've Paid</button>
-    </form>
-
-    <script>
-      setTimeout(() => {
-        document.getElementById('paidBtn').style.display = 'inline-block';
-      }, 120000);
-    </script>
+    <!DOCTYPE html>
+    <html lang="en">
+      <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+        <title>Pay to Confirm Appointment – SidhaHealth</title>
+        <style>
+          body {
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: #f5f5f7;
+            font-family: system-ui, sans-serif;
+            margin: 0;
+            padding: 0;
+            color: #222;
+          }
+          .center-card {
+            background: #fff;
+            max-width: 410px;
+            border-radius: 18px;
+            box-shadow: 0 5px 24px rgba(0,0,0,0.09);
+            padding: 32px 24px 24px 24px;
+          }
+          .logo { text-align: center; margin-bottom: 28px; }
+          .logo img { height: 52px; }
+          h2 { color: #0c4826; margin-top: 0; font-size: 23px; text-align:center; }
+          .amount { font-size: 20px; font-weight: 700; color: #0c4826; text-align:center; margin-bottom:2px; }
+          .qrbox { text-align:center; margin:24px 0 18px 0; }
+          .upi-btn { display: inline-block; background: #16a34a; color: #fff; font-weight: 600; font-size: 17px; padding:11px 32px; border-radius:99px; text-decoration:none; margin-bottom:14px; }
+          .waiting { font-size: 15px; text-align:center; color: #707070; margin:14px 0; }
+          .paid-btn, .paid-btn:disabled { width:100%; max-width:260px; font-size:16px; font-weight:600; padding:12px; border-radius:8px; border:none; background:#2563eb; color:white; cursor:pointer; margin:auto; display:block; margin-top:14px; }
+          .paid-btn:disabled { background: #b2c6f8; cursor: not-allowed; }
+          .help { font-size: 13px; color: #7a7a7a; text-align:center; margin-top:20px; }
+          @media screen and (max-width: 600px) {
+            .center-card { padding:18px 8px 14px 8px; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="center-card">
+          <div class="logo">
+            <img src="https://sidhahealth.com/logo.png" alt="SidhaHealth Logo"/>
+          </div>
+          <h2>Pay & Confirm Your Appointment</h2>
+          <div class="amount">₹${amount}</div>
+          <div class="qrbox">
+            <img src="${qr}" height="180" width="180" alt="UPI QR Code" style="border:7px solid #ededed; border-radius:16px;">
+          </div>
+          <div style="text-align:center;">
+            <a href="${upiLink}" class="upi-btn">Pay Instantly with UPI App</a>
+          </div>
+          <div class="waiting" id="statusText">
+            Please complete your payment in your UPI app.<br>
+            <span id="timerText"></span>
+          </div>
+          <form method="POST" action="/payment-done/${appointment.id}" style="text-align:center;">
+            <button class="paid-btn" id="paidBtn" type="submit" disabled>I've Paid</button>
+          </form>
+          <div class="help">
+            <strong>Need help?</strong> Email <a href="mailto:support@sidhahealth.com">support@sidhahealth.com</a>
+            <br>
+            <span style="color:#b91c1c;">Never share your PIN/OTP with anyone.</span>
+          </div>
+        </div>
+        <script>
+          let s = 120;
+          const paidBtn = document.getElementById('paidBtn');
+          const statusText = document.getElementById('statusText');
+          const timerText = document.getElementById('timerText');
+          function updateTimer() {
+            if(s > 0) {
+              timerText.innerHTML = 'Button enabled in '+s+'s';
+              s--;
+              setTimeout(updateTimer, 1000);
+            } else {
+              timerText.innerHTML = '';
+              paidBtn.disabled = false;
+              paidBtn.innerText = "I've Paid";
+              statusText.innerHTML = 'After payment, click above to proceed.';
+            }
+          }
+          paidBtn.innerText = "Please Wait...";
+          updateTimer();
+        </script>
+      </body>
+    </html>
   `);
 });
 
