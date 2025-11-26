@@ -319,7 +319,7 @@ app.post("/doctor-set-time/:id", async (req, res) => {
   }
 });
 
-// 6️⃣ Payment Page (ENHANCED/CENTERED)
+// 6️⃣ PAYMENT PAGE (centered & with warning)
 app.get("/payment/:id", async (req, res) => {
   const appointment = await getAppointment(req.params.id);
   if (!appointment) return res.status(404).send("Appointment not found");
@@ -355,6 +355,17 @@ app.get("/payment/:id", async (req, res) => {
             box-shadow: 0 5px 24px rgba(0,0,0,0.09);
             padding: 32px 24px 24px 24px;
           }
+          .warnbox {
+            background: #fffbe8;
+            color: #a47e00;
+            border: 1.5px solid #ffe58f;
+            border-radius: 9px;
+            padding: 12px 16px;
+            margin-bottom: 18px;
+            font-size: 15px;
+            text-align: center;
+            font-weight: 500;
+          }
           .logo { text-align: center; margin-bottom: 28px; }
           .logo img { height: 52px; }
           h2 { color: #0c4826; margin-top: 0; font-size: 23px; text-align:center; }
@@ -374,6 +385,10 @@ app.get("/payment/:id", async (req, res) => {
         <div class="center-card">
           <div class="logo">
             <img src="https://sidhahealth.com/logo.png" alt="SidhaHealth Logo"/>
+          </div>
+          <div class="warnbox">
+            ⚠️ <b>Do NOT pay before your appointment time.</b><br>
+            Please pay only <u>when you join your video call</u> and a doctor is present.
           </div>
           <h2>Pay & Confirm Your Appointment</h2>
           <div class="amount">₹${amount}</div>
@@ -421,21 +436,107 @@ app.get("/payment/:id", async (req, res) => {
   `);
 });
 
-// 7️⃣ Payment Done → Show Video Link
+// 7️⃣ Payment Done → Show Video Link (ENHANCED)
 app.post("/payment-done/:id", async (req, res) => {
   const appointment = await getAppointment(req.params.id);
   if (!appointment) return res.status(404).send("Appointment not found");
 
   await updateAppointment(appointment.id, { payment_done: true });
 
+  // For online: modern join screen
   if (appointment.consult_type.toLowerCase() === "online") {
     res.send(`
-      <h2>Payment Confirmed ✅</h2>
-      <p>Your video consultation is ready.</p>
-      <a href="${appointment.video_link}" style="padding:10px 20px;background:green;color:white;border-radius:5px;text-decoration:none;">Join Now</a>
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8"/>
+        <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+        <title>Video Consultation Ready – SidhaHealth</title>
+        <style>
+          body {
+            min-height: 100vh; display: flex; align-items: center; justify-content: center;
+            background: #f5f5f5; font-family: system-ui, sans-serif; margin:0; color: #1b1b1e;
+          }
+          .join-card {
+            background: #fff; border-radius: 18px; padding: 38px 32px 32px 32px;
+            max-width: 410px; box-shadow: 0 6px 28px rgba(0,0,0,0.10);
+            text-align: center;
+          }
+          .logo { margin-bottom: 20px; }
+          .logo img { height: 50px; }
+          .success { font-size: 24px; margin:0 0 10px 0; color: #17c964; }
+          .details {
+            color: #212326; font-size: 16px; margin-bottom:18px; line-height:1.6;
+          }
+          .join-btn {
+            background: #2563eb; color: #fff !important; font-weight: 600; font-size: 18px;
+            padding: 15px 35px; border-radius: 30px; border:none; text-decoration:none; display:inline-block; margin:12px 0 2px 0;
+            transition: box-shadow .15s;
+          }
+          .join-btn:hover { box-shadow:0 6px 24px #2563eb40; }
+        </style>
+      </head>
+      <body>
+        <div class="join-card">
+          <div class="logo">
+            <img src="https://sidhahealth.com/logo.png" alt="SidhaHealth Logo"/>
+          </div>
+          <div class="success">✅ Payment Confirmed!</div>
+          <div class="details">
+            Your video consultation is ready.<br>
+            Please <b>pay at the start of your call</b> if not already done.
+          </div>
+          <a class="join-btn" href="${appointment.video_link}" target="_blank">Join Now</a>
+          <div style="margin-top:18px;font-size:13px;color:#919191;">
+            Need help? Email <a href="mailto:support@sidhahealth.com">support@sidhahealth.com</a>
+          </div>
+        </div>
+      </body>
+      </html>
     `);
   } else {
-    res.send("<h2>Payment Confirmed ✅</h2><p>Your appointment is confirmed.</p>");
+    // For offline: confirmation card
+    res.send(`
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8"/>
+        <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+        <title>Payment Confirmed – SidhaHealth</title>
+        <style>
+          body {
+            min-height: 100vh; display: flex; align-items: center; justify-content: center;
+            background: #f5f5f5; font-family: system-ui, sans-serif; margin:0; color: #1b1b1e;
+          }
+          .join-card {
+            background: #fff; border-radius: 18px; padding: 38px 32px 32px 32px;
+            max-width: 410px; box-shadow: 0 6px 28px rgba(0,0,0,0.10);
+            text-align: center;
+          }
+          .logo { margin-bottom: 20px; }
+          .logo img { height: 50px; }
+          .success { font-size: 24px; margin:0 0 10px 0; color: #17c964; }
+          .details {
+            color: #212326; font-size: 16px; margin-bottom:18px; line-height:1.7;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="join-card">
+          <div class="logo">
+            <img src="https://sidhahealth.com/logo.png" alt="SidhaHealth Logo"/>
+          </div>
+          <div class="success">✅ Payment Confirmed!</div>
+          <div class="details">
+            Your appointment at SidhaHealth is confirmed.
+          </div>
+          <div style="margin-top:18px;font-size:13px;color:#919191;">
+            Need help? Email <a href="mailto:support@sidhahealth.com">support@sidhahealth.com</a>
+          </div>
+        </div>
+      </body>
+      </html>
+    `);
   }
 });
 
